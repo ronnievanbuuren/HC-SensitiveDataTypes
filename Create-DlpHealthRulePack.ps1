@@ -43,17 +43,21 @@ Requires: Connected Microsoft Purview Compliance PowerShell session (Connect-IPP
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
   [string]$RepoRoot = (Split-Path -Parent $PSCommandPath),
-  [switch]$EnsureDictionaries = $true,
+  [switch]$EnsureDictionaries = $false,
   [switch]$InjectDictionaryIds = $true,
   [switch]$BumpBuild,
   [switch]$ImportRulepack,
-  [switch]$UpdateRulepack
+  [switch]$UpdateRulepack,
+  [switch]$AutoImportOnMissing = $true
 )
 
-function Get-FileBytesUtf8AsUnicode {
+function Get-FileAsUnicodeBytes {
   param([Parameter(Mandatory)][string]$Path)
-  # DLP cmdlets expect Byte[] of the file content; return raw bytes.
-  return (Get-Content -LiteralPath $Path -Encoding Byte -ReadCount 0)
+  # Read text (UTF-8) and re-encode as UTF-16 LE bytes, ensuring CRLF line endings.
+  $lines = Get-Content -LiteralPath $Path -Encoding UTF8
+  $text = ($lines -join "`r`n")
+  if ($lines.Count -gt 0 -and -not $text.EndsWith("`r`n")) { $text += "`r`n" }
+  return [System.Text.Encoding]::Unicode.GetBytes($text)
 }
 
 function Ensure-DlpDictionary {
@@ -63,7 +67,6 @@ function Ensure-DlpDictionary {
     [Parameter(Mandatory)][string]$Description,
     [Parameter(Mandatory)][string]$FilePath
   )
-  $bytes = Get-FileBytesUtf8AsUnicode -Path $FilePath
   try {
     $existing = Get-DlpKeywordDictionary -ErrorAction Stop | Where-Object { $_.Name -eq $Name }
   } catch {
@@ -75,7 +78,9 @@ function Ensure-DlpDictionary {
     if ($PSCmdlet.ShouldProcess("DLP Keyword Dictionary '$Name'", 'Update')) {
       try {
         if (Get-Command Set-DlpKeywordDictionary -ErrorAction SilentlyContinue) {
-          Set-DlpKeywordDictionary -Identity $existing.Identity -FileData $bytes -ErrorAction Stop | Out-Null
+          $bytes = Get-FileAsUnicodeBytes -Path $FilePath
+          # Some environments resolve -Identity by Name rather than GUID; prefer Name here.
+          Set-DlpKeywordDictionary -Identity $Name -FileData $bytes -ErrorAction Stop | Out-Null
           Write-Host "Updated dictionary: $Name ($($existing.Identity))"
         } else {
           Write-Warning "Set-DlpKeywordDictionary not available; deleting and recreating '$Name'"
@@ -83,6 +88,7 @@ function Ensure-DlpDictionary {
           if (Get-Command Remove-DlpKeywordDictionary -ErrorAction SilentlyContinue) {
             Remove-DlpKeywordDictionary -Identity $existing.Identity -Confirm:$false -ErrorAction Stop
           }
+          $bytes = Get-FileAsUnicodeBytes -Path $FilePath
           New-DlpKeywordDictionary -Name $Name -Description $Description -FileData $bytes -ErrorAction Stop | Out-Null
           Write-Host "Recreated dictionary: $Name"
         }
@@ -92,6 +98,7 @@ function Ensure-DlpDictionary {
     }
   } else {
     if ($PSCmdlet.ShouldProcess("DLP Keyword Dictionary '$Name'", 'Create')) {
+      $bytes = Get-FileAsUnicodeBytes -Path $FilePath
       New-DlpKeywordDictionary -Name $Name -Description $Description -FileData $bytes -ErrorAction Stop | Out-Null
       Write-Host "Created dictionary: $Name"
     }
@@ -215,15 +222,39 @@ if ($InjectDictionaryIds) {
 # Import/update rulepack if requested
 if ($ImportRulepack) {
   if ($PSCmdlet.ShouldProcess('Rulepack', 'Import (New-DlpSensitiveInformationTypeRulePackage)')) {
-    $bytes = [System.IO.File]::ReadAllBytes($xmlPath)
-    New-DlpSensitiveInformationTypeRulePackage -FileData $bytes
-    Write-Host 'Imported rulepack.'
+    try {
+      $bytes = [System.IO.File]::ReadAllBytes($xmlPath)
+      New-DlpSensitiveInformationTypeRulePackage -FileData $bytes -ErrorAction Stop | Out-Null
+      Write-Host 'Imported rulepack.'
+    } catch {
+      Write-Error ("Import failed: {0}" -f $_.Exception.Message)
+      throw
+    }
   }
 }
 if ($UpdateRulepack) {
   if ($PSCmdlet.ShouldProcess('Rulepack', 'Update (Set-DlpSensitiveInformationTypeRulePackage)')) {
     $bytes = [System.IO.File]::ReadAllBytes($xmlPath)
-    Set-DlpSensitiveInformationTypeRulePackage -FileData $bytes
-    Write-Host 'Updated rulepack.'
+    try {
+      Set-DlpSensitiveInformationTypeRulePackage -FileData $bytes -ErrorAction Stop | Out-Null
+      Write-Host 'Updated rulepack.'
+    } catch {
+      $msg = $_.Exception.Message
+      $fqid = $_.FullyQualifiedErrorId
+      $isNotFound = ($fqid -like '*ManagementObjectNotFoundException*') -or ($msg -match "couldn't be found")
+      if ($AutoImportOnMissing -and $isNotFound) {
+        Write-Warning 'Update failed (rulepack not found). Attempting import...'
+        try {
+          New-DlpSensitiveInformationTypeRulePackage -FileData $bytes -ErrorAction Stop | Out-Null
+          Write-Host 'Imported rulepack.'
+        } catch {
+          Write-Error ("Import after update failure also failed: {0}" -f $_.Exception.Message)
+          throw
+        }
+      } else {
+        Write-Error ("Update failed: {0}" -f $msg)
+        throw
+      }
+    }
   }
 }

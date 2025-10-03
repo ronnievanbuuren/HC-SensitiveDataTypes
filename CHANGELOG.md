@@ -13,3 +13,7 @@ Format: Semantic Versioning (MAJOR.MINOR.PATCH). The underlying rule pack uses a
 ## [7.0.1] - 2025-10-03
 - Initial import of rule pack and dictionaries into this repository structure.
 
+## [7.0.3] - 2025-10-03
+- Helper script: auto-fallback to import when update fails because the rule pack is missing.
+- Helper script: stricter error handling; stop on failures and show clear messages.
+- Helper script: corrected WhatIf/ShouldProcess behavior and GUID injection; safe Unicode byte handling.
