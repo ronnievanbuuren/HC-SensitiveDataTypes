@@ -48,7 +48,8 @@ param(
   [switch]$BumpBuild,
   [switch]$ImportRulepack,
   [switch]$UpdateRulepack,
-  [switch]$AutoImportOnMissing = $true
+  [switch]$AutoImportOnMissing = $true,
+  [string]$PublisherName
 )
 
 function Get-FileAsUnicodeBytes {
@@ -170,6 +171,26 @@ function Inject-DictionaryIdsIntoRulepack {
   }
 }
 
+function Set-RulepackPublisherName {
+  [CmdletBinding(SupportsShouldProcess=$true)]
+  param(
+    [Parameter(Mandatory)][string]$XmlPath,
+    [Parameter(Mandatory)][string]$PublisherName
+  )
+  if (-not (Test-Path -LiteralPath $XmlPath)) { throw "Rulepack not found: $XmlPath" }
+  $text = Get-Content -LiteralPath $XmlPath -Raw -Encoding Unicode
+  $original = $text
+  $text = [regex]::Replace($text, '<PublisherName>.*?</PublisherName>', ('<PublisherName>{0}</PublisherName>' -f [regex]::Escape($PublisherName)).Replace('\','\\'))
+  if ($text -ne $original) {
+    if ($PSCmdlet.ShouldProcess($XmlPath, ("Set PublisherName to '{0}'" -f $PublisherName))) {
+      $text | Set-Content -LiteralPath $XmlPath -Encoding Unicode
+      Write-Host ("PublisherName updated to '{0}'." -f $PublisherName)
+    }
+  } else {
+    Write-Host 'No PublisherName changes applied.'
+  }
+}
+
 #
 # Main
 #
@@ -217,6 +238,11 @@ if ($InjectDictionaryIds) {
   } else {
     Inject-DictionaryIdsIntoRulepack -XmlPath $xmlPath -Cure1Guid $cure1Id -ZipCityGuid $zipId -IncrementBuild:$BumpBuild.IsPresent -WhatIf:$WhatIfPreference
   }
+}
+
+# Optionally set PublisherName branding
+if ($PublisherName) {
+  Set-RulepackPublisherName -XmlPath $xmlPath -PublisherName $PublisherName -WhatIf:$WhatIfPreference
 }
 
 # Import/update rulepack if requested
