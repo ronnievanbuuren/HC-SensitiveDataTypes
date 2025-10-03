@@ -1,72 +1,113 @@
 # HC-SensitiveDataTypes
-Microsoft 365 Sensitive Information Types created for the Dutch HealthCare sector. These Sensitive Information Types can be used in for example: Office 365 DLP, Microsoft Cloud App Security and AIP Scanner
 
-The following Sensitive Information Types are included:
-*	Custom - Netherlands Citizen's Service (BSN) Number
-*	Custom - Dutch Passport number
-*	Custom - Netherlands ZIP Code + City
-* Custom - Email addresses
-*	Custom - general Sensitive Keywords
-*	Custom - healthcare cure set 1
-*	Custom - healthcare cure set 2
-*	Custom - healthcare care set 1 - Zorgplan
-*	Custom - healthcare care set 2 - DVO
-*	Custom - healthcare care set 3 - WMO
-*	Custom - healthcare care set 4 - Algemeen
-*	Custom - healthcare care set 5 - Administratie
-*	Custom - healthcare care set 6 - Medische
+Custom Microsoft 365/Purview Sensitive Information Types (SITs) tailored for the Dutch healthcare sector. These definitions can be used across Microsoft Purview Data Loss Prevention (DLP), Microsoft Defender for Cloud Apps (formerly MCAS), and AIP/MIP Scanner scenarios.
 
-## Why these Sensitive Information Types
-Microsoft 365 includes 100 sensitive Information Types up to now. While this a great numnber, it does not include localized Sensitive Information Types for the Dutch martket, besides BSN. This set is build to extend on the build-in types and allow you to faster implement services like DLP without the need of building sensitive information types from scratch yourself.
+## What’s Included
+- Custom – Netherlands Citizen's Service (BSN) Number
+- Custom – Dutch passport number
+- Custom – Netherlands ZIP code + city (keyword dictionary)
+- Custom – Email addresses
+- Custom – General sensitive keywords
+- Custom – Healthcare cure set 1 (keywords)
+- Custom – Healthcare cure set 2 (keywords)
+- Custom – Healthcare care sets (e.g., Zorgplan, DVO, WMO, Algemeen, Administratie, Medische)
 
-## Getting Started
+Note: Dictionaries currently included in this repo are focused on the NL ZIP/City list and Healthcare Cure Set 1. The rule package (`HealthCare.xml`) references these and additional SIT definitions.
 
-### Prerequisites
+## Repository Structure
+- `Rulepack/HealthCare.xml` – Main SIT rule package XML
+- `Dictionaries/Keyword_netherlands_zipcode_cities.txt` – NL ZIP + city keywords
+- `Dictionaries/termen_healthcare_cure1.txt` – Healthcare “cure” keywords (set 1)
+- `Create-DlpHealthRulePack.ps1` – Helper script for generating/importing the rule pack
 
-### Installing
+## Why These SITs
+Microsoft 365 includes many built‑in SITs, but localized SITs for the Dutch market are limited (BSN being the primary example). This project extends the built‑in coverage so you can accelerate DLP deployments without building everything from scratch.
 
+## Prerequisites
+- Permissions: Compliance Administrator or equivalent in Microsoft 365
+- PowerShell with the Exchange Online Management module (for Compliance PowerShell)
+- Ability to connect to Microsoft Purview Compliance PowerShell (`Connect-IPPSSession`)
 
-#####variable#####
+## Installation and Import
 
-$locatie="directory where files are located"
+1) Clone or download this repository locally.
 
-####create keywords#####
+2) Connect to Microsoft Purview Compliance PowerShell:
 
-$fileData2 = Get-Content $locatie\termen_healthcare.txt -Encoding Byte -ReadCount 0
-New-DlpKeywordDictionary -Name "termen_healthcare_cure1" -Description "healthcare cure termen" -FileData $fileData2
+```powershell
+Import-Module ExchangeOnlineManagement
+Connect-IPPSSession
+```
 
-$fileData = Get-Content $locatie\Keyword_netherlands_zipcode_cities.txt -Encoding Byte -ReadCount 0
-New-DlpKeywordDictionary -Name Keyword_netherlands_zipcode_cities -Description "list of all dutch cities" -FileData $fileData
+3) Define your local path to the repo root and create the keyword dictionaries:
 
-Get-DlpKeywordDictionary | select name,identity
+```powershell
+$repoRoot = 'C:\_github\HC-SensitiveDataTypes'   # adjust if different
 
-####inlezen sensitive information sets#####
+# Healthcare Cure Set 1 dictionary
+$cure1Bytes = Get-Content -Path (Join-Path $repoRoot 'Dictionaries\termen_healthcare_cure1.txt') -Encoding Byte -ReadCount 0
+New-DlpKeywordDictionary -Name 'termen_healthcare_cure1' -Description 'Healthcare cure terms (set 1)' -FileData $cure1Bytes
 
-New-DlpSensitiveInformationTypeRulePackage -FileData (Get-Content -Path $locatie\HealthCare.xml -Encoding Byte)
+# Netherlands ZIP + City dictionary
+$zipBytes = Get-Content -Path (Join-Path $repoRoot 'Dictionaries\Keyword_netherlands_zipcode_cities.txt') -Encoding Byte -ReadCount 0
+New-DlpKeywordDictionary -Name 'Keyword_netherlands_zipcode_cities' -Description 'NL zip code + city keywords' -FileData $zipBytes
 
-###update rulepack######
+# Optional: verify dictionaries
+Get-DlpKeywordDictionary | Select-Object Name,Identity | Format-Table
+```
 
-Set-DlpSensitiveInformationTypeRulePackage -FileData ([Byte[]]$(Get-Content -Path $locatie\HealthCare.xml -Encoding Byte -ReadCount 0))
+4) Import the rule package (initial upload):
 
-### Usage
+```powershell
+$rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\HealthCare.xml') -Encoding Byte -ReadCount 0
+New-DlpSensitiveInformationTypeRulePackage -FileData ([Byte[]]$rulepackBytes)
+```
 
+5) Update the rule package (subsequent changes):
 
-## Find us
-* [Wortell](https://wortell.nl/)
-* [Wortell Security](https://security.wortell.nl/)
-* [GitHub](https://github.com/wortell/)
+```powershell
+$rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\HealthCare.xml') -Encoding Byte -ReadCount 0
+Set-DlpSensitiveInformationTypeRulePackage -FileData ([Byte[]]$rulepackBytes)
+```
+
+## Usage
+- After importing, the custom SITs become available in the Microsoft Purview compliance portal to use in DLP policies.
+- You can also reference these SITs in Microsoft Defender for Cloud Apps (file policies) and AIP/MIP labeling/Scanner scenarios depending on your configuration.
+
+## Versioning
+This project follows Semantic Versioning: `MAJOR.MINOR.PATCH`.
+
+- MAJOR: Breaking changes to SIT definitions (e.g., removing or renaming SITs)
+- MINOR: Backward‑compatible additions (new SITs, new keywords, new evidence)
+- PATCH: Fixes and small tweaks (regex tuning, typo fixes, minor keyword updates)
+
+Recommended practice:
+- Update the version metadata inside `Rulepack/HealthCare.xml` when making changes.
+- Keep a CHANGELOG (e.g., `CHANGELOG.md`) to summarize what changed per version.
+- Tag releases in Git (e.g., `v1.2.0`) to align with the rule pack version.
+
+See `CHANGELOG.md` for the release history.
+
+## Microsoft Learn References
+- Create custom Sensitive Information Types (SITs): https://learn.microsoft.com/microsoft-365/compliance/create-custom-sensitive-information-types
+- New-DlpSensitiveInformationTypeRulePackage: https://learn.microsoft.com/powershell/module/exchange/new-dlpsensitiveinformationtyperulepackage
+- Set-DlpSensitiveInformationTypeRulePackage: https://learn.microsoft.com/powershell/module/exchange/set-dlpsensitiveinformationtyperulepackage
+- New-DlpKeywordDictionary: https://learn.microsoft.com/powershell/module/exchange/new-dlpkeyworddictionary
+- Built‑in sensitive information types overview: https://learn.microsoft.com/microsoft-365/compliance/sensitive-information-type-learn-about
+
+## Find Us
+- Wortell: https://wortell.nl/
+- Wortell Security: https://security.wortell.nl/
+- GitHub: https://github.com/wortell/
 
 ## Contributing
-
-work in progress
+Contributions are welcome. Please open an issue or pull request describing the change, motivation, and testing notes.
 
 ## Thanks
 Microsoft
 
 ## Authors
-
-* **Ronnie van Buuren** - *Initial work* - [LinkedIn](https://www.linkedin.com/in/ronnievanbuuren/) / [GitHub](https://https://github.com/ronnievanbuuren)
+- Ronnie van Buuren – Initial work – LinkedIn: https://www.linkedin.com/in/ronnievanbuuren/ – GitHub: https://github.com/ronnievanbuuren
 
 ## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+This project is licensed under the MIT License – see the `LICENSE` file for details.
