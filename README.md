@@ -12,6 +12,8 @@ Custom Microsoft 365/Purview Sensitive Information Types (SITs) tailored for the
 - Custom – Healthcare cure set 2 (keywords)
 - Custom – Healthcare care sets (e.g., Zorgplan, DVO, WMO, Algemeen, Administratie, Medische)
 
+See detailed detection logic for each SIT in [docs/SITs.md](docs/SITs.md).
+
 Note: Dictionaries currently included in this repo are focused on the NL ZIP/City list and Healthcare Cure Set 1. The rule package (`HealthCare.xml`) references these and additional SIT definitions.
 
 ## Repository Structure
@@ -94,11 +96,6 @@ See `CHANGELOG.md` for the release history.
 - Set-DlpSensitiveInformationTypeRulePackage: https://learn.microsoft.com/powershell/module/exchange/set-dlpsensitiveinformationtyperulepackage
 - New-DlpKeywordDictionary: https://learn.microsoft.com/powershell/module/exchange/new-dlpkeyworddictionary
 - Built‑in sensitive information types overview: https://learn.microsoft.com/microsoft-365/compliance/sensitive-information-type-learn-about
-
-## Find Us
-- Wortell: https://wortell.nl/
-- Wortell Security: https://security.wortell.nl/
-- GitHub: https://github.com/wortell/
 
 ## Contributing
 Contributions are welcome. Please open an issue or pull request describing the change, motivation, and testing notes.
