@@ -72,6 +72,35 @@ $rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\HealthCare.xml
 Set-DlpSensitiveInformationTypeRulePackage -FileData ([Byte[]]$rulepackBytes)
 ```
 
+## Helper Script (One-Command Setup)
+Use the included helper to create/update dictionaries, inject their GUIDs into the rule pack, and optionally bump the version and import/update the package.
+
+Dry run (no changes):
+```powershell
+cd C:\_github\HC-SensitiveDataTypes
+./Create-DlpHealthRulePack.ps1 -WhatIf
+```
+
+Typical update (ensure dictionaries, inject IDs, bump build, update rule pack):
+```powershell
+Import-Module ExchangeOnlineManagement
+Connect-IPPSSession
+
+cd C:\_github\HC-SensitiveDataTypes
+./Create-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds -BumpBuild -UpdateRulepack
+```
+
+First-time import (instead of update):
+```powershell
+./Create-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds -BumpBuild -ImportRulepack
+```
+
+Notes:
+- The script replaces placeholder GUIDs in `Rulepack/HealthCare.xml` for:
+  - Cure Set 1 dictionary: `termen_healthcare_cure1`
+  - NL ZIP + City dictionary: `Keyword_netherlands_zipcode_cities`
+- Use `-WhatIf` anytime to preview actions without changes.
+
 ## Usage
 - After importing, the custom SITs become available in the Microsoft Purview compliance portal to use in DLP policies.
 - You can also reference these SITs in Microsoft Defender for Cloud Apps (file policies) and AIP/MIP labeling/Scanner scenarios depending on your configuration.

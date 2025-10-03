@@ -9,7 +9,6 @@ replaces placeholder GUIDs inside `Rulepack/HealthCare.xml`, optionally bumps th
 the DLP Sensitive Information Type Rule Package using Compliance PowerShell.
 
 Initial author: Ronnie van Buuren
-Maintained by: Wortell
 Copyright (c) 2025. All rights reserved.
 
 .PARAMETER RepoRoot
@@ -48,8 +47,7 @@ param(
   [switch]$InjectDictionaryIds = $true,
   [switch]$BumpBuild,
   [switch]$ImportRulepack,
-  [switch]$UpdateRulepack,
-  [switch]$WhatIf
+  [switch]$UpdateRulepack
 )
 
 function Get-FileBytesUtf8AsUnicode {
@@ -59,6 +57,7 @@ function Get-FileBytesUtf8AsUnicode {
 }
 
 function Ensure-DlpDictionary {
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param(
     [Parameter(Mandatory)][string]$Name,
     [Parameter(Mandatory)][string]$Description,
@@ -107,7 +106,7 @@ function Ensure-DlpDictionary {
 }
 
 function Inject-DictionaryIdsIntoRulepack {
-  [CmdletBinding()]
+  [CmdletBinding(SupportsShouldProcess=$true)]
   param(
     [Parameter(Mandatory)][string]$XmlPath,
     [Parameter(Mandatory)][string]$Cure1Guid,
@@ -127,12 +126,16 @@ function Inject-DictionaryIdsIntoRulepack {
   $replacements = @()
 
   if ($Cure1Guid -and ($text -match [regex]::Escape($placeholderCure1))) {
-    $text = $text -replace [regex]::Escape("idRef=\"$placeholderCure1\""), "idRef=\"$Cure1Guid\""
+    $patternCure1 = 'idRef="' + $placeholderCure1 + '"'
+    $replaceCure1 = 'idRef="' + $Cure1Guid + '"'
+    $text = $text -replace [regex]::Escape($patternCure1), $replaceCure1
     $replacements += "Cure1 placeholder => $Cure1Guid"
   }
 
   if ($ZipCityGuid -and ($text -match [regex]::Escape($placeholderZip))) {
-    $text = $text -replace [regex]::Escape("idRef=\"$placeholderZip\""), "idRef=\"$ZipCityGuid\""
+    $patternZip = 'idRef="' + $placeholderZip + '"'
+    $replaceZip = 'idRef="' + $ZipCityGuid + '"'
+    $text = $text -replace [regex]::Escape($patternZip), $replaceZip
     $replacements += "ZIP/City placeholder => $ZipCityGuid"
   }
 
@@ -143,7 +146,7 @@ function Inject-DictionaryIdsIntoRulepack {
       { param($m)
         $maj=[int]$m.Groups[1].Value; $min=[int]$m.Groups[2].Value; $b=[int]$m.Groups[3].Value; $rev=[int]$m.Groups[4].Value;
         $b++;
-        "<Version major=\"$maj\" minor=\"$min\" build=\"$b\" revision=\"$rev\" />"
+        ('<Version major="{0}" minor="{1}" build="{2}" revision="{3}" />' -f $maj, $min, $b, $rev)
       },
       1
     )
@@ -183,7 +186,7 @@ if ($EnsureDictionaries) {
   foreach ($f in $files) {
     $name = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
     $desc = "Keywords from file: $($f.Name)"
-    Ensure-DlpDictionary -Name $name -Description $desc -FilePath $f.FullName -WhatIf:$WhatIf.IsPresent | Out-Null
+    Ensure-DlpDictionary -Name $name -Description $desc -FilePath $f.FullName -WhatIf:$WhatIfPreference | Out-Null
   }
   # Retrieve identities for the two known names
   try {
@@ -205,7 +208,7 @@ if ($InjectDictionaryIds) {
   if (-not $cure1Id -or -not $zipId) {
     Write-Warning "Missing dictionary identity(s): cure1='$cure1Id' zip='$zipId'. Skipping XML injection."
   } else {
-    Inject-DictionaryIdsIntoRulepack -XmlPath $xmlPath -Cure1Guid $cure1Id -ZipCityGuid $zipId -IncrementBuild:$BumpBuild.IsPresent -WhatIf:$WhatIf.IsPresent
+    Inject-DictionaryIdsIntoRulepack -XmlPath $xmlPath -Cure1Guid $cure1Id -ZipCityGuid $zipId -IncrementBuild:$BumpBuild.IsPresent -WhatIf:$WhatIfPreference
   }
 }
 
@@ -224,4 +227,3 @@ if ($UpdateRulepack) {
     Write-Host 'Updated rulepack.'
   }
 }
-
