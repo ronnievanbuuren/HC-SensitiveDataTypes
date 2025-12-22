@@ -17,10 +17,11 @@ See detailed detection logic for each SIT in [docs/SITs.md](docs/SITs.md).
 Note: Dictionaries currently included in this repo are focused on the NL ZIP/City list and Healthcare Cure Set 1. The rule package (`HealthCare.xml`) references these and additional SIT definitions.
 
 ## Repository Structure
-- `Rulepack/HealthCare.xml` – Main SIT rule package XML
-- `Dictionaries/Keyword_netherlands_zipcode_cities.txt` – NL ZIP + city keywords
-- `Dictionaries/termen_healthcare_cure1.txt` – Healthcare “cure” keywords (set 1)
-- `Create-DlpHealthRulePack.ps1` – Helper script for generating/importing the rule pack
+- `Rulepack/HealthCare.xml` - Template SIT rule package XML (contains placeholder dictionary GUIDs)
+- `Rulepack/Import-HCSensitiveDataTypes.xml` - Generated import XML with tenant-specific dictionary GUIDs (gitignored)
+- `Dictionaries/Keyword_netherlands_zipcode_cities.txt` - NL ZIP + city keywords
+- `Dictionaries/termen_healthcare_cure1.txt` - Healthcare "cure" keywords (set 1)
+- `Create-DlpHealthRulePack.ps1` - Helper script for generating/importing the rule pack
 
 ## Why These SITs
 Microsoft 365 includes many built‑in SITs, but localized SITs for the Dutch market are limited (BSN being the primary example). This project extends the built‑in coverage so you can accelerate DLP deployments without building everything from scratch.
@@ -58,17 +59,26 @@ New-DlpKeywordDictionary -Name 'Keyword_netherlands_zipcode_cities' -Description
 Get-DlpKeywordDictionary | Select-Object Name,Identity | Format-Table
 ```
 
-4) Import the rule package (initial upload):
+4) Generate the import-ready rule package XML (inject dictionary identities):
 
 ```powershell
-$rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\HealthCare.xml') -Encoding Byte -ReadCount 0
+cd C:\_github\HC-SensitiveDataTypes
+./Create-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds
+```
+
+This generates `Rulepack/Import-HCSensitiveDataTypes.xml` (ignored by Git) which you can import/update in Purview.
+
+5) Import the rule package (initial upload):
+
+```powershell
+$rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\Import-HCSensitiveDataTypes.xml') -Encoding Byte -ReadCount 0
 New-DlpSensitiveInformationTypeRulePackage -FileData ([Byte[]]$rulepackBytes)
 ```
 
-5) Update the rule package (subsequent changes):
+6) Update the rule package (subsequent changes):
 
 ```powershell
-$rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\HealthCare.xml') -Encoding Byte -ReadCount 0
+$rulepackBytes = Get-Content -Path (Join-Path $repoRoot 'Rulepack\Import-HCSensitiveDataTypes.xml') -Encoding Byte -ReadCount 0
 Set-DlpSensitiveInformationTypeRulePackage -FileData ([Byte[]]$rulepackBytes)
 ```
 
@@ -96,7 +106,8 @@ First-time import (instead of update):
 ```
 
 Notes:
-- The script replaces placeholder GUIDs in `Rulepack/HealthCare.xml` for:
+- The script keeps `Rulepack/HealthCare.xml` as a template and writes an import-ready copy to `Rulepack/Import-HCSensitiveDataTypes.xml`.
+- The script replaces placeholder GUIDs in the generated import XML for:
   - Cure Set 1 dictionary: `termen_healthcare_cure1`
   - NL ZIP + City dictionary: `Keyword_netherlands_zipcode_cities`
 - Use `-WhatIf` anytime to preview actions without changes.

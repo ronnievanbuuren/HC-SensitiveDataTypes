@@ -5,8 +5,9 @@ Ensures keyword dictionaries, injects their GUIDs into the rule pack, and option
 
 .DESCRIPTION
 Creates or updates DLP keyword dictionaries from the `Dictionaries` folder, fetches their identities (GUIDs),
-replaces placeholder GUIDs inside `Rulepack/HealthCare.xml`, optionally bumps the build version, and imports/updates
-the DLP Sensitive Information Type Rule Package using Compliance PowerShell.
+creates an import-ready copy of the rule pack from a template (default: `Rulepack/HealthCare.xml`), injects the
+tenant-specific dictionary GUIDs into the copy, optionally bumps the build version, and imports/updates the DLP
+Sensitive Information Type Rule Package using Compliance PowerShell.
 
 Initial author: Ronnie van Buuren
 Copyright (c) 2025. All rights reserved.
@@ -15,10 +16,19 @@ Copyright (c) 2025. All rights reserved.
 Root folder of the repository. Defaults to the script directory.
 
 .PARAMETER EnsureDictionaries
-Create or update dictionaries from the `Dictionaries` folder (default: on).
+Create or update dictionaries from the `Dictionaries` folder (default: off).
 
 .PARAMETER InjectDictionaryIds
 Replace placeholder GUIDs in the rule pack with the tenant dictionary identities (default: on).
+
+.PARAMETER RulepackTemplatePath
+Path to the template rule pack XML (default: `Rulepack/HealthCare.xml`).
+
+.PARAMETER OutputRulepackPath
+Path to write the import-ready rule pack XML (default: `Rulepack/Import-HCSensitiveDataTypes.xml`).
+
+.PARAMETER InPlace
+Write changes back to the template rule pack instead of generating a separate import file (default: off).
 
 .PARAMETER BumpBuild
 Increment the rule pack Version `build` attribute by 1 (default: off).
@@ -43,6 +53,9 @@ Requires: Connected Microsoft Purview Compliance PowerShell session (Connect-IPP
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
   [string]$RepoRoot = (Split-Path -Parent $PSCommandPath),
+  [string]$RulepackTemplatePath = 'Rulepack\HealthCare.xml',
+  [string]$OutputRulepackPath = 'Rulepack\Import-HCSensitiveDataTypes.xml',
+  [switch]$InPlace,
   [switch]$EnsureDictionaries = $false,
   [switch]$InjectDictionaryIds = $true,
   [switch]$BumpBuild,
@@ -51,6 +64,19 @@ param(
   [switch]$AutoImportOnMissing = $true,
   [string]$PublisherName
 )
+
+# Placeholder GUIDs committed in the template rulepack (tenant-agnostic)
+$script:PlaceholderCure1 = '3a2b0400-36e2-42c0-beb0-ad3ad999ff28'
+$script:PlaceholderZip   = '490f642f-d3a6-4510-940f-7bfdb343d4ad'
+
+function Resolve-RepoPath {
+  param(
+    [Parameter(Mandatory)][string]$RepoRoot,
+    [Parameter(Mandatory)][string]$Path
+  )
+  if ([System.IO.Path]::IsPathRooted($Path)) { return $Path }
+  Join-Path $RepoRoot $Path
+}
 
 function Get-FileAsUnicodeBytes {
   param([Parameter(Mandatory)][string]$Path)
@@ -113,41 +139,47 @@ function Ensure-DlpDictionary {
   }
 }
 
-function Inject-DictionaryIdsIntoRulepack {
+function New-RulepackImportFile {
   [CmdletBinding(SupportsShouldProcess=$true)]
   param(
-    [Parameter(Mandatory)][string]$XmlPath,
-    [Parameter(Mandatory)][string]$Cure1Guid,
-    [Parameter(Mandatory)][string]$ZipCityGuid,
-    [switch]$IncrementBuild
+    [Parameter(Mandatory)][string]$TemplateXmlPath,
+    [Parameter(Mandatory)][string]$OutputXmlPath,
+    [string]$Cure1Guid,
+    [string]$ZipCityGuid,
+    [switch]$InjectDictionaryIds,
+    [switch]$IncrementBuild,
+    [string]$PublisherName
   )
 
-  if (-not (Test-Path -LiteralPath $XmlPath)) { throw "Rulepack not found: $XmlPath" }
+  if (-not (Test-Path -LiteralPath $TemplateXmlPath)) { throw "Rulepack template not found: $TemplateXmlPath" }
 
-  $text = Get-Content -LiteralPath $XmlPath -Raw -Encoding Unicode
-
-  # Placeholders currently used in this repo
-  $placeholderCure1 = '3a2b0400-36e2-42c0-beb0-ad3ad999ff28'
-  $placeholderZip   = '490f642f-d3a6-4510-940f-7bfdb343d4ad'
+  $text = Get-Content -LiteralPath $TemplateXmlPath -Raw -Encoding Unicode
 
   $original = $text
-  $replacements = @()
+  $notes = @()
 
-  if ($Cure1Guid -and ($text -match [regex]::Escape($placeholderCure1))) {
-    $patternCure1 = 'idRef="' + $placeholderCure1 + '"'
-    $replaceCure1 = 'idRef="' + $Cure1Guid + '"'
-    $text = $text -replace [regex]::Escape($patternCure1), $replaceCure1
-    $replacements += "Cure1 placeholder => $Cure1Guid"
-  }
+  if ($InjectDictionaryIds) {
+    if ($Cure1Guid -and ($text -match [regex]::Escape($script:PlaceholderCure1))) {
+      $patternCure1 = 'idRef="' + $script:PlaceholderCure1 + '"'
+      $replaceCure1 = 'idRef="' + $Cure1Guid + '"'
+      $text = $text -replace [regex]::Escape($patternCure1), $replaceCure1
+      $notes += "Cure1 placeholder => $Cure1Guid"
+    } elseif ($Cure1Guid) {
+      $notes += 'Cure1 placeholder not found (already injected?)'
+    }
 
-  if ($ZipCityGuid -and ($text -match [regex]::Escape($placeholderZip))) {
-    $patternZip = 'idRef="' + $placeholderZip + '"'
-    $replaceZip = 'idRef="' + $ZipCityGuid + '"'
-    $text = $text -replace [regex]::Escape($patternZip), $replaceZip
-    $replacements += "ZIP/City placeholder => $ZipCityGuid"
+    if ($ZipCityGuid -and ($text -match [regex]::Escape($script:PlaceholderZip))) {
+      $patternZip = 'idRef="' + $script:PlaceholderZip + '"'
+      $replaceZip = 'idRef="' + $ZipCityGuid + '"'
+      $text = $text -replace [regex]::Escape($patternZip), $replaceZip
+      $notes += "ZIP/City placeholder => $ZipCityGuid"
+    } elseif ($ZipCityGuid) {
+      $notes += 'ZIP/City placeholder not found (already injected?)'
+    }
   }
 
   if ($IncrementBuild) {
+    $beforeBuild = $text
     $text = [System.Text.RegularExpressions.Regex]::Replace(
       $text,
       '<Version\s+major="(\d+)"\s+minor="(\d+)"\s+build="(\d+)"\s+revision="(\d+)"\s*/>',
@@ -158,49 +190,59 @@ function Inject-DictionaryIdsIntoRulepack {
       },
       1
     )
+    if ($text -ne $beforeBuild) { $notes += 'Version build incremented' }
   }
 
-  if ($text -ne $original) {
-    if ($PSCmdlet.ShouldProcess($XmlPath, 'Write updated rulepack')) {
-      $text | Set-Content -LiteralPath $XmlPath -Encoding Unicode
-      if ($replacements.Count -gt 0) { Write-Host ("Replacements: " + ($replacements -join '; ')) }
-      if ($IncrementBuild) { Write-Host "Version build incremented." }
+  if ($PublisherName) {
+    $beforePublisher = $text
+    $escapedPublisherName = [System.Security.SecurityElement]::Escape($PublisherName)
+    $publisherElement = ('<PublisherName>{0}</PublisherName>' -f $escapedPublisherName)
+    $text = [System.Text.RegularExpressions.Regex]::Replace(
+      $text,
+      '<PublisherName>.*?</PublisherName>',
+      { param($m) $publisherElement }
+    )
+    if ($text -ne $beforePublisher) { $notes += ("PublisherName => '{0}'" -f $PublisherName) }
+  }
+
+  $shouldWrite = ($OutputXmlPath -ne $TemplateXmlPath) -or ($text -ne $original)
+  if ($shouldWrite) {
+    if ($PSCmdlet.ShouldProcess($OutputXmlPath, 'Write import-ready rulepack')) {
+      $outDir = Split-Path -Parent $OutputXmlPath
+      if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
+        New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+      }
+      $text | Set-Content -LiteralPath $OutputXmlPath -Encoding Unicode
     }
   } else {
-    Write-Host "No changes applied to rulepack (placeholders not found or already injected)."
+    Write-Host 'No changes applied to rulepack.'
   }
+
+  if ($notes.Count -gt 0) { Write-Host ("Rulepack changes: " + ($notes -join '; ')) }
+  $OutputXmlPath
 }
 
-function Set-RulepackPublisherName {
-  [CmdletBinding(SupportsShouldProcess=$true)]
-  param(
-    [Parameter(Mandatory)][string]$XmlPath,
-    [Parameter(Mandatory)][string]$PublisherName
-  )
-  if (-not (Test-Path -LiteralPath $XmlPath)) { throw "Rulepack not found: $XmlPath" }
+function Assert-RulepackReadyForImport {
+  param([Parameter(Mandatory)][string]$XmlPath)
+  if (-not (Test-Path -LiteralPath $XmlPath)) { throw "Rulepack file not found: $XmlPath" }
   $text = Get-Content -LiteralPath $XmlPath -Raw -Encoding Unicode
-  $original = $text
-  $text = [regex]::Replace($text, '<PublisherName>.*?</PublisherName>', ('<PublisherName>{0}</PublisherName>' -f [regex]::Escape($PublisherName)).Replace('\','\\'))
-  if ($text -ne $original) {
-    if ($PSCmdlet.ShouldProcess($XmlPath, ("Set PublisherName to '{0}'" -f $PublisherName))) {
-      $text | Set-Content -LiteralPath $XmlPath -Encoding Unicode
-      Write-Host ("PublisherName updated to '{0}'." -f $PublisherName)
-    }
-  } else {
-    Write-Host 'No PublisherName changes applied.'
+  if ($text.Contains($script:PlaceholderCure1) -or $text.Contains($script:PlaceholderZip)) {
+    throw "Rulepack still contains placeholder GUID(s). Ensure dictionaries exist and run with -InjectDictionaryIds before importing/updating."
   }
 }
 
 #
 # Main
 #
-$repo = Resolve-Path -LiteralPath $RepoRoot
+$repo = (Resolve-Path -LiteralPath $RepoRoot).Path
 $dictFolder = Join-Path $repo 'Dictionaries'
-$xmlPath    = Join-Path $repo 'Rulepack\HealthCare.xml'
+$templateXmlPath = Resolve-RepoPath -RepoRoot $repo -Path $RulepackTemplatePath
+$outputXmlPath = if ($InPlace) { $templateXmlPath } else { Resolve-RepoPath -RepoRoot $repo -Path $OutputRulepackPath }
 
 Write-Host "Repo: $repo"
 Write-Host "Dictionaries: $dictFolder"
-Write-Host "Rulepack: $xmlPath"
+Write-Host "Rulepack template: $templateXmlPath"
+Write-Host "Rulepack output:   $outputXmlPath"
 
 $cure1Name = 'termen_healthcare_cure1'
 $zipName   = 'Keyword_netherlands_zipcode_cities'
@@ -234,22 +276,27 @@ if ($InjectDictionaryIds) {
     } catch {}
   }
   if (-not $cure1Id -or -not $zipId) {
-    Write-Warning "Missing dictionary identity(s): cure1='$cure1Id' zip='$zipId'. Skipping XML injection."
-  } else {
-    Inject-DictionaryIdsIntoRulepack -XmlPath $xmlPath -Cure1Guid $cure1Id -ZipCityGuid $zipId -IncrementBuild:$BumpBuild.IsPresent -WhatIf:$WhatIfPreference
+    Write-Warning "Missing dictionary identity(s): cure1='$cure1Id' zip='$zipId'. XML injection will be skipped."
   }
 }
 
-# Optionally set PublisherName branding
-if ($PublisherName) {
-  Set-RulepackPublisherName -XmlPath $xmlPath -PublisherName $PublisherName -WhatIf:$WhatIfPreference
-}
+$doInject = $InjectDictionaryIds -and $cure1Id -and $zipId
+$effectiveXmlPath = New-RulepackImportFile `
+  -TemplateXmlPath $templateXmlPath `
+  -OutputXmlPath $outputXmlPath `
+  -Cure1Guid $cure1Id `
+  -ZipCityGuid $zipId `
+  -InjectDictionaryIds:$doInject `
+  -IncrementBuild:$BumpBuild.IsPresent `
+  -PublisherName $PublisherName `
+  -WhatIf:$WhatIfPreference
 
 # Import/update rulepack if requested
 if ($ImportRulepack) {
   if ($PSCmdlet.ShouldProcess('Rulepack', 'Import (New-DlpSensitiveInformationTypeRulePackage)')) {
     try {
-      $bytes = [System.IO.File]::ReadAllBytes($xmlPath)
+      Assert-RulepackReadyForImport -XmlPath $effectiveXmlPath
+      $bytes = [System.IO.File]::ReadAllBytes($effectiveXmlPath)
       New-DlpSensitiveInformationTypeRulePackage -FileData $bytes -ErrorAction Stop | Out-Null
       Write-Host 'Imported rulepack.'
     } catch {
@@ -260,7 +307,8 @@ if ($ImportRulepack) {
 }
 if ($UpdateRulepack) {
   if ($PSCmdlet.ShouldProcess('Rulepack', 'Update (Set-DlpSensitiveInformationTypeRulePackage)')) {
-    $bytes = [System.IO.File]::ReadAllBytes($xmlPath)
+    Assert-RulepackReadyForImport -XmlPath $effectiveXmlPath
+    $bytes = [System.IO.File]::ReadAllBytes($effectiveXmlPath)
     try {
       Set-DlpSensitiveInformationTypeRulePackage -FileData $bytes -ErrorAction Stop | Out-Null
       Write-Host 'Updated rulepack.'
