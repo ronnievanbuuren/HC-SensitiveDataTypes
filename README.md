@@ -21,7 +21,7 @@ Note: Dictionaries currently included in this repo are focused on the NL ZIP/Cit
 - `Rulepack/Import-HCSensitiveDataTypes.xml` - Generated import XML with tenant-specific dictionary GUIDs (gitignored)
 - `Dictionaries/Keyword_netherlands_zipcode_cities.txt` - NL ZIP + city keywords
 - `Dictionaries/termen_healthcare_cure1.txt` - Healthcare "cure" keywords (set 1)
-- `Create-DlpHealthRulePack.ps1` - Helper script for generating/importing the rule pack
+- `Set-DlpHealthRulePack.ps1` - Helper script for generating/importing the rule pack
 
 ## Why These SITs
 Microsoft 365 includes many built‑in SITs, but localized SITs for the Dutch market are limited (BSN being the primary example). This project extends the built‑in coverage so you can accelerate DLP deployments without building everything from scratch.
@@ -63,7 +63,7 @@ Get-DlpKeywordDictionary | Select-Object Name,Identity | Format-Table
 
 ```powershell
 cd C:\_github\HC-SensitiveDataTypes
-./Create-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds
+./Set-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds
 ```
 
 This generates `Rulepack/Import-HCSensitiveDataTypes.xml` (ignored by Git) which you can import/update in Purview.
@@ -88,7 +88,7 @@ Use the included helper to create/update dictionaries, inject their GUIDs into t
 Dry run (no changes):
 ```powershell
 cd C:\_github\HC-SensitiveDataTypes
-./Create-DlpHealthRulePack.ps1 -WhatIf
+./Set-DlpHealthRulePack.ps1 -WhatIf
 ```
 
 Typical update (ensure dictionaries, inject IDs, bump build, update rule pack):
@@ -97,12 +97,12 @@ Import-Module ExchangeOnlineManagement
 Connect-IPPSSession
 
 cd C:\_github\HC-SensitiveDataTypes
-./Create-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds -BumpBuild -UpdateRulepack
+./Set-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds -BumpBuild -UpdateRulepack
 ```
 
 First-time import (instead of update):
 ```powershell
-./Create-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds -BumpBuild -ImportRulepack
+./Set-DlpHealthRulePack.ps1 -EnsureDictionaries -InjectDictionaryIds -BumpBuild -ImportRulepack
 ```
 
 Notes:

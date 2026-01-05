@@ -46,13 +46,13 @@ Preview actions without writing changes to files or calling import/update cmdlet
 Requires: Connected Microsoft Purview Compliance PowerShell session (Connect-IPPSSession)
 
 .EXAMPLE
-./Create-DlpHealthRulePack.ps1 -BumpBuild -InjectDictionaryIds -EnsureDictionaries -UpdateRulepack
+./Set-DlpHealthRulePack.ps1 -BumpBuild -InjectDictionaryIds -EnsureDictionaries -UpdateRulepack
 
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
-  [string]$RepoRoot = (Split-Path -Parent $PSCommandPath),
+  [string]$RepoRoot,
   [string]$RulepackTemplatePath = 'Rulepack\HealthCare.xml',
   [string]$OutputRulepackPath = 'Rulepack\Import-HCSensitiveDataTypes.xml',
   [switch]$InPlace,
@@ -64,6 +64,17 @@ param(
   [switch]$AutoImportOnMissing = $true,
   [string]$PublisherName
 )
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+  $scriptPath = $MyInvocation.MyCommand.Path
+  if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    $RepoRoot = $PSScriptRoot
+  } elseif (-not [string]::IsNullOrWhiteSpace($scriptPath)) {
+    $RepoRoot = Split-Path -Parent $scriptPath
+  } else {
+    $RepoRoot = (Get-Location).Path
+  }
+}
 
 # Placeholder GUIDs committed in the template rulepack (tenant-agnostic)
 $script:PlaceholderCure1 = '3a2b0400-36e2-42c0-beb0-ad3ad999ff28'
@@ -87,7 +98,7 @@ function Get-FileAsUnicodeBytes {
   return [System.Text.Encoding]::Unicode.GetBytes($text)
 }
 
-function Ensure-DlpDictionary {
+function Set-DlpDictionary {
   [CmdletBinding(SupportsShouldProcess=$true)]
   param(
     [Parameter(Mandatory)][string]$Name,
@@ -256,7 +267,7 @@ if ($EnsureDictionaries) {
   foreach ($f in $files) {
     $name = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
     $desc = "Keywords from file: $($f.Name)"
-    Ensure-DlpDictionary -Name $name -Description $desc -FilePath $f.FullName -WhatIf:$WhatIfPreference | Out-Null
+    Set-DlpDictionary -Name $name -Description $desc -FilePath $f.FullName -WhatIf:$WhatIfPreference | Out-Null
   }
   # Retrieve identities for the two known names
   try {
