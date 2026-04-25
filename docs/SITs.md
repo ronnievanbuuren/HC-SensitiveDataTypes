@@ -5,7 +5,7 @@ This document describes the custom Sensitive Information Types included in `Rule
 Notes
 - Proximity refers to the maximum distance between the primary identifier and supporting evidence.
 - Confidence levels are expressed per pattern; the entity also has a `recommendedConfidence` that policies typically use.
-- Some patterns use a DLP keyword dictionary created in your tenant. After creating dictionaries, ensure the rule pack references the correct dictionary identities (GUIDs) for your environment.
+- Some patterns use a DLP keyword dictionary created in your tenant. Run `Set-DlpHealthRulePack.ps1` to create/update the dictionaries and generate rule pack XML that references the correct tenant dictionary identities (GUIDs).
 
 ## Netherlands Citizen's Service (BSN) Number
 - Primary identifier: `Func_netherlands_bsn` (BSN format/validation function)
@@ -63,7 +63,7 @@ Notes
 - Primary identifier: `Keywords_cure_2`
 - Supporting evidence: Often paired with Cure Set 1 dictionary; EU date boosts confidence
 - Proximity: `500`
-- Patterns and confidence: see “Healthcare Cure Set 1” combined patterns above
+- Patterns and confidence: see "Healthcare Cure Set 1" combined patterns above
 - Recommended confidence: `75`
 
 ## Healthcare Care Sets
@@ -115,9 +115,12 @@ These entities use EU date anchors with one or more domain-specific keyword grou
   - Recommended confidence: `85`
 
 ## Implementation Tips
-- Dictionary identities: After creating dictionaries, retrieve identities with:
+- Dictionary identities: The helper script handles this automatically. For manual validation, retrieve identities with:
   - `Get-DlpKeywordDictionary | Select-Object Name,Identity`
-  - Replace the dictionary `idRef` GUIDs in the rule pack with your identities before importing, or re-generate the XML using the helper script.
+  - Replace the dictionary `idRef` GUIDs in the rule pack with your identities before importing, or regenerate the XML using `Set-DlpHealthRulePack.ps1`.
+- Recovery testing:
+  - If the rule package is missing, run `.\Set-DlpHealthRulePack.ps1 -EnsureDictionaries -BumpBuild -UpdateRulepack`; the helper attempts update first and imports automatically when the rule package is not found.
+  - If a dictionary is missing, `-EnsureDictionaries` recreates it and the generated import XML uses the new dictionary identity.
 - Tuning:
   - Increase `patternsProximity` to broaden context; decrease to make matches stricter.
   - Adjust `recommendedConfidence` to control when a match counts as the SIT in policies.

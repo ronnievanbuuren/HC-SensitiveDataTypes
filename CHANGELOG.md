@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 Format: Semantic Versioning (MAJOR.MINOR.PATCH). The underlying rule pack uses a four-part version (major/minor/build/revision); we map PATCH to the `build` field and keep `revision` at 0 unless otherwise noted.
 
+## [7.0.5] - 2026-04-25
+- Current committed template rule pack version is `7.0.5.0`.
+- Helper script renamed to `Set-DlpHealthRulePack.ps1`.
+- Helper script keeps `Rulepack/HealthCare.xml` tenant-agnostic and writes tenant-specific output to `Rulepack/Import-HCSensitiveDataTypes.xml`.
+- Helper script creates or updates the two tenant keyword dictionaries, injects their live GUIDs, and can update or import the rule package.
+- Tenant validation confirmed the `-UpdateRulepack` path auto-imports successfully when the healthcare rule package is missing.
+- Tenant validation confirmed `-BumpBuild` generates version `7.0.6.0` import XML from the `7.0.5.0` template.
+
+## [7.0.3] - 2025-10-03
+- Helper script: auto-fallback to import when update fails because the rule pack is missing.
+- Helper script: stricter error handling; stop on failures and show clear messages.
+- Helper script: corrected WhatIf/ShouldProcess behavior and GUID injection; safe Unicode byte handling.
+
 ## [7.0.2] - 2025-10-03
 - Bump rule pack version to `7.0.2` (build=2) in `Rulepack/HealthCare.xml`.
 - Reorganized repository structure: added `Rulepack/` and `Dictionaries/` folders.
@@ -12,8 +25,3 @@ Format: Semantic Versioning (MAJOR.MINOR.PATCH). The underlying rule pack uses a
 
 ## [7.0.1] - 2025-10-03
 - Initial import of rule pack and dictionaries into this repository structure.
-
-## [7.0.3] - 2025-10-03
-- Helper script: auto-fallback to import when update fails because the rule pack is missing.
-- Helper script: stricter error handling; stop on failures and show clear messages.
-- Helper script: corrected WhatIf/ShouldProcess behavior and GUID injection; safe Unicode byte handling.
