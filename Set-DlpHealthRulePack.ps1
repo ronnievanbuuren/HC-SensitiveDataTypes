@@ -91,11 +91,15 @@ function Resolve-RepoPath {
 
 function Get-FileAsUnicodeBytes {
   param([Parameter(Mandatory)][string]$Path)
-  # Read text (UTF-8) and re-encode as UTF-16 LE bytes, ensuring CRLF line endings.
+  # FIX 2026-07: New/Set-DlpKeywordDictionary -FileData expects UTF-8 bytes.
+  # BOM-less UTF-16 (the previous behaviour) is read as raw bytes server-side
+  # and truncated at the first NUL, leaving a dictionary with a single junk
+  # term ("a") - so the SITs never matched real terms. Source files in
+  # Dictionaries/ are UTF-8 as of this fix.
   $lines = Get-Content -LiteralPath $Path -Encoding UTF8
   $text = ($lines -join "`r`n")
   if ($lines.Count -gt 0 -and -not $text.EndsWith("`r`n")) { $text += "`r`n" }
-  return [System.Text.Encoding]::Unicode.GetBytes($text)
+  return [System.Text.Encoding]::UTF8.GetBytes($text)
 }
 
 function Set-DlpDictionary {
